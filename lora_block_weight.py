@@ -34,9 +34,9 @@ class LoraLoaderBlockWeight:
         key_map = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, key_map)
         loaded = comfy.lora.load_lora(lora, key_map)
 
-        vector = block_vector.split(":")
-        if len(vector) == 1:
-
+        block_vector = block_vector.split(":")
+        if len(block_vector) > 1:
+            block_vector = block_vector[1]
 
         vector = block_vector.split(",")
         vector_i = 0
