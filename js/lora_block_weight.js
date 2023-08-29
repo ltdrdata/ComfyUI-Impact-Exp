@@ -6,14 +6,14 @@ app.registerExtension({
 	nodeCreated(node, app) {
 		if(node.comfyClass == "LoraLoaderBlockWeight") {
 			node._value = "Preset";
-			Object.defineProperty(node.widgets[3], "value", {
+			Object.defineProperty(node.widgets[4], "value", {
 				set: (value) => {
 				        const stackTrace = new Error().stack;
                         if(stackTrace.includes('inner_value_change')) {
                             if(value != "Preset") {
-                                node.widgets[4].value = value.split(':')[1];
+                                node.widgets[5].value = value.split(':')[1];
 	                            if(node.widgets_values) {
-	                                node.widgets_values[4] = node.widgets[3].value;
+	                                node.widgets_values[5] = node.widgets[4].value;
                                 }
                             }
                         }
