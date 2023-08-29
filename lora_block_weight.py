@@ -46,6 +46,8 @@ class LoraLoaderBlockWeight:
         block_vector = block_vector.split(":")
         if len(block_vector) > 1:
             block_vector = block_vector[1]
+        else:
+            block_vector = block_vector[0]
 
         vector = block_vector.split(",")
         vector_i = 0
