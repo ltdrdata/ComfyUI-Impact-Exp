@@ -42,9 +42,11 @@ class LoraLoaderBlockWeight:
         vector = block_vector.split(",")
         vector_i = 0
 
+        last_k_unet_num = None
         new_modelpatcher = model.clone()
+        ratio = strength_model
+
         for k, v in loaded.items():
-            ratio = strength_model
             k_unet = k[len("diffusion_model."):]
 
             k_unet_num = None
@@ -61,9 +63,14 @@ class LoraLoaderBlockWeight:
                 else:
                     k_unet_num = int(k_unet_num)
 
-                if len(vector) > vector_i:
+                if last_k_unet_num != k_unet_num and len(vector) > vector_i:
                     ratio = float(vector[vector_i].strip())
                     vector_i += 1
+
+                last_k_unet_num = k_unet_num
+            else:
+                last_k_unet_num = 0
+                ratio = strength_model
 
             print(f"\t{k_unet} -> ({ratio}) ")
 
