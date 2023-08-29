@@ -101,10 +101,10 @@ class LoraLoaderBlockWeight:
             last_k_unet_num = k_unet_num
 
             if inverse:
-                new_modelpatcher.add_patches({k: v}, ratio)
+                new_modelpatcher.add_patches({k: v}, strength_model * (1 - ratio))
                 print(f"\t{k_unet} -> inv({ratio}) ")
             else:
-                new_modelpatcher.add_patches({k: v}, 1 - ratio)
+                new_modelpatcher.add_patches({k: v}, strength_model * ratio)
                 print(f"\t{k_unet} -> ({ratio}) ")
 
         # prepare base patch
@@ -112,13 +112,12 @@ class LoraLoaderBlockWeight:
         for k, v, k_unet in others:
 
             if inverse:
-                new_modelpatcher.add_patches({k: v}, ratio)
+                new_modelpatcher.add_patches({k: v}, strength_model * (1 - ratio))
                 print(f"\t{k_unet} -> inv({ratio}) ")
             else:
-                new_modelpatcher.add_patches({k: v}, 1 - ratio)
+                new_modelpatcher.add_patches({k: v}, strength_model * ratio)
                 print(f"\t{k_unet} -> ({ratio}) ")
 
-        new_modelpatcher.add_patches(loaded, strength_model)
         new_clip = clip.clone()
         new_clip.add_patches(loaded, strength_clip)
 
