@@ -63,6 +63,7 @@ class LoraLoaderBlockWeight:
 
                 if len(vector) > vector_i:
                     ratio = float(vector[vector_i].strip())
+                    vector_i += 1
 
             print(f"\t{k_unet} -> ({ratio}) ")
 
