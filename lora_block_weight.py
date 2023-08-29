@@ -15,12 +15,13 @@ class LoraLoaderBlockWeight:
                               "strength_model": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
                               "strength_clip": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
                               "preset": (
-                                  ["sd-lora:1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1"],  # 17
-                                  ["sd-etc:1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1"],  # 26
-                                  ["sdxl-lora:1,0,0,0,0,0,1,1,1,1,1,1"],  # 12
-                                  ["sdxl-etc:1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1"],  # 19
+                                  ["Preset",
+                                   "sd-lora:1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1",  # 17
+                                   "sd-etc:1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1",  # 26
+                                   "sdxl-lora:1,0,0,0,0,0,1,1,1,1,1,1",  # 12
+                                   "sdxl-etc:1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1"],  # 19
                                 ),
-                              "block_vector": ("STRING", {"multiline": False, "default": "sd-lora:1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1"}),
+                              "block_vector": ("STRING", {"multiline": True, "default": "sd-lora:1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1"}),
                               }}
 
     RETURN_TYPES = ("MODEL", "CLIP")
@@ -74,7 +75,7 @@ class LoraLoaderBlockWeight:
         return (new_modelpatcher, new_clip)
 
 
-    def doit(self, model, clip, lora_name, strength_model, strength_clip, block_vector):
+    def doit(self, model, clip, lora_name, strength_model, strength_clip, preset, block_vector):
         if strength_model == 0 and strength_clip == 0:
             return (model, clip)
 
