@@ -5,7 +5,6 @@ import os
 import torch
 import numpy as np
 import nodes
-from PIL import Image
 from scipy.ndimage import gaussian_filter
 import re
 
@@ -174,24 +173,7 @@ class LoraLoaderBlockWeight:
         return (model_lora, clip_lora)
 
 
-class XY_Capsule:
-    def pre_define_model(self, model, clip, vae):
-        return model, clip, vae
-
-    def set_result(self, image, latent):
-        pass
-
-    def get_result(self, model, clip, vae):
-        return None
-
-    def set_x_capsule(self, capsule):
-        return None
-
-    def getLabel(self):
-        return "Unknown"
-
-
-class XY_Capsule_LoraBlockWeight(XY_Capsule):
+class XY_Capsule_LoraBlockWeight:
     def __init__(self, x, y, target_vector, label, storage, params):
         self.x = x
         self.y = y
