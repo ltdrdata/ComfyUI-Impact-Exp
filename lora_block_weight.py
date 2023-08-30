@@ -6,6 +6,12 @@ import torch
 import numpy as np
 import nodes
 from PIL import Image
+from scipy.ndimage import gaussian_filter
+import re
+
+
+def is_numeric_string(input_str):
+    return re.match(r'^-?\d+(\.\d+)?$', input_str) is not None
 
 
 def pil2tensor(image):
@@ -43,13 +49,24 @@ class LoraLoaderBlockWeight:
                               "strength_clip": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
                               "inverse": ("BOOLEAN", {"default": False, "label_on": "True", "label_off": "False"}),
                               "preset": (preset,),
-                              "block_vector": ("STRING", {"multiline": True, "default": "1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1"}),
+                              "block_vector": ("STRING", {"multiline": True, "placeholder": "block weight vectors", "default": "1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1"}),
                               }}
 
     RETURN_TYPES = ("MODEL", "CLIP")
     FUNCTION = "doit"
 
     CATEGORY = "__impact_exp"
+
+    @staticmethod
+    def validate(vectors):
+        if len(vectors) < 12:
+            return False
+
+        for x in vectors:
+            if x not in ['R', 'r', 'U', 'u'] and not is_numeric_string(x):
+                return False
+
+        return True
 
     @staticmethod
     def load_lora_for_models(model, clip, lora, strength_model, strength_clip, inverse, block_vector):
@@ -65,6 +82,10 @@ class LoraLoaderBlockWeight:
 
         vector = block_vector.split(",")
         vector_i = 1
+
+        if not LoraLoaderBlockWeight.validate(vector):
+            raise ValueError(f"[LoraLoaderBlockWeight] invalid block_vector '{block_vector}'")
+
 
         last_k_unet_num = None
         new_modelpatcher = model.clone()
@@ -157,10 +178,13 @@ class XY_Capsule:
     def pre_define_model(self, model, clip, vae):
         return model, clip, vae
 
+    def set_result(self, image, latent):
+        pass
+
     def get_result(self, model, clip, vae):
         return None
 
-    def set_another_capsule(self, capsule):
+    def set_x_capsule(self, capsule):
         return None
 
     def getLabel(self):
@@ -168,26 +192,44 @@ class XY_Capsule:
 
 
 class XY_Capsule_LoraBlockWeight(XY_Capsule):
-    def __init__(self, x, y, label, storage):
+    def __init__(self, x, y, target_vector, label, storage, params):
         self.x = x
         self.y = y
+        self.target_vector = target_vector
+        self.reference_vector = None
         self.label = label
-        self.storage = []
+        self.storage = storage
         self.another_capsule = None
+        self.params = params
 
-    def set_another_capsule(self, capsule):
+    def set_reference_vector(self, vector):
+        self.reference_vector = vector
+
+    def set_x_capsule(self, capsule):
         self.another_capsule = capsule
 
-    def patch_model(self, model):
-        return model
+    def set_result(self, image, latent):
+        if self.another_capsule is not None:
+            self.storage[(self.another_capsule.x, self.y)] = image
+
+    def patch_model(self, model, clip):
+        lora_name, strength_model, strength_clip, inverse, block_vectors = self.params
+        if self.y == 0:
+            target_vector = self.another_capsule.target_vector if self.another_capsule else self.target_vector
+            return LoraLoaderBlockWeight().doit(model, clip, lora_name, strength_model, strength_clip, inverse,
+                                                "", target_vector)
+        elif self.y == 1:
+            reference_vector = self.another_capsule.reference_vector if self.another_capsule else self.reference_vector
+            return LoraLoaderBlockWeight().doit(model, clip, lora_name, strength_model, strength_clip, inverse,
+                                                "", reference_vector)
+
+        return model, clip
 
     def pre_define_model(self, model, clip, vae):
-        if self.y == 0:
-            return self.patch_model(model)
-        elif self.y == 1:
-            return self.patch_model(model)
-        else:
-            return model, clip, vae
+        if self.y < 2:
+            model, clip = self.patch_model(model, clip)
+
+        return model, clip, vae
 
     def get_result(self, model, clip, vae):
         if self.y < 2:
@@ -195,67 +237,135 @@ class XY_Capsule_LoraBlockWeight(XY_Capsule):
 
         if self.y == 2:
             # diff
-            weighted_image = self.storage[self.x][0]
-            reference_image = self.storage[self.x][1]
+            weighted_image = self.storage[(self.another_capsule.x, 0)]
+            reference_image = self.storage[(self.another_capsule.x, 1)]
             image = torch.abs(weighted_image - reference_image)
-            self.storage[self.x][self.y] = image
+            self.storage[(self.another_capsule.x, self.y)] = image
         elif self.y == 3:
             # heatmap
-            heatmap = self.storage[self.x][2].squeeze().sum(dim=-1)
-            image = self.storage[self.x][0].clone()
-            image += 0.5 * heatmap
+            heatmap = self.storage[(self.another_capsule.x, 2)].squeeze().sum(dim=-1)
+            image = self.storage[(self.another_capsule.x, 0)].clone()
+
+            heatmap = heatmap.unsqueeze(0).unsqueeze(-1)
+            heatmap = heatmap.expand(image.shape)
+            heatmap_np = heatmap.detach().cpu().numpy()
+
+            blurred_heatmap = gaussian_filter(heatmap_np, sigma=2)
+            blurred_heatmap_tensor = torch.from_numpy(blurred_heatmap).to(image.device, dtype=torch.float32)
+
+            # Create a yellow mask based on the blurred heatmap
+            yellow_mask = torch.zeros_like(image)
+            yellow_mask[..., 0] = 1.0  # Set red channel to 1 (full intensity)
+            yellow_mask[..., 1] = 1.0  # Set green channel to 1 (full intensity)
+
+            # Combine the yellow mask with the blurred heatmap
+            combined_image = image + 0.6 * heatmap * yellow_mask
+
+            # Make sure values are within the valid range [0, 1]
+            image = torch.clamp(combined_image, 0, 1)
 
         latent = nodes.VAEEncode().encode(vae, image)[0]
-        return (latent, image)
-
+        return (image, latent)
 
     def getLabel(self):
         return self.label
 
 
+def load_preset_dict():
+    preset = ["Preset"]  # 20
+    preset += load_lbw_preset("lbw-preset.txt")
+    preset += load_lbw_preset("lbw-preset.custom.txt")
+
+    dict = {}
+    for x in preset:
+        item = x.split(':')
+        if len(item) > 1:
+            dict[item[0]] = item[1]
+
+    return dict
+
+
 class XYPlot_LoraBlockWeight:
+    @staticmethod
+    def resolve_vector_string(vector_string, preset_dict):
+        vector_string = vector_string.strip()
+
+        if vector_string in preset_dict:
+            return vector_string, preset_dict[vector_string]
+
+        vector_infos = vector_string.split(':')
+
+        if len(vector_infos) > 1:
+            return vector_infos[0], vector_infos[1]
+        elif len(vector_infos) > 0:
+            return vector_infos[0], vector_infos[0]
+        else:
+            return None, None
+
     @classmethod
     def INPUT_TYPES(cls):
         preset = ["Preset"]  # 20
         preset += load_lbw_preset("lbw-preset.txt")
         preset += load_lbw_preset("lbw-preset.custom.txt")
 
-        default_vectors = "SD-NONE\nSD-ALL\nSD-INS\nSD-IND\nSD-INALL\nSD-MIDD\nSD-MIDD0.2\nSD-MIDD0.8\nSD-MOUT\nSD-OUTD\nSD-OUTS\nSD-OUTALL"
+        default_vectors = "SD-NONE/SD-ALL\nSD-ALL/SD-ALL\nSD-INS/SD-ALL\nSD-IND/SD-ALL\nSD-INALL/SD-ALL\nSD-MIDD/SD-ALL\nSD-MIDD0.2/SD-ALL\nSD-MIDD0.8/SD-ALL\nSD-MOUT/SD-ALL\nSD-OUTD/SD-ALL\nSD-OUTS/SD-ALL\nSD-OUTALL/SD-ALL"
 
-        return {"required": { "model": ("MODEL",),
-                              "clip": ("CLIP", ),
-                              "lora_name": (folder_paths.get_filename_list("loras"), ),
-                              "strength_model": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                              "strength_clip": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                              "inverse": ("BOOLEAN", {"default": False, "label_on": "True", "label_off": "False"}),
-                              "preset": (preset,),
-                              "block_vectors": ("STRING", {"multiline": True, "default": default_vectors}),
+        return {"required": {"lora_name": (folder_paths.get_filename_list("loras"), ),
+                             "strength_model": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
+                             "strength_clip": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
+                             "inverse": ("BOOLEAN", {"default": False, "label_on": "True", "label_off": "False"}),
+                             "preset": (preset,),
+                             "block_vectors": ("STRING", {"multiline": True, "default": default_vectors, "placeholder": "{target vector}/{reference vector}"}),
                               }}
 
-    RETURN_TYPES = ("XY", "XY"),
+    RETURN_TYPES = ("XY", "XY")
     RETURN_NAMES = ("X (vectors)", "Y (effect_compares)")
 
-    FUNCTION = "xy_value"
+    FUNCTION = "doit"
     CATEGORY = "__impact_exp"
 
-    def doit(self, model, clip, lora_name, strength_model, strength_clip, inverse, preset, block_vectors):
+    def doit(self, lora_name, strength_model, strength_clip, inverse, preset, block_vectors):
         xy_type = "XY_Capsule"
 
-        xy_value = []
+        preset_dict = load_preset_dict()
+        lora_params = lora_name, strength_model, strength_clip, inverse, block_vectors
 
-        for block_vectors in preset.split("\n"):
-            block_vector = block_vectors.strip()
+        storage = {}
+        x_values = []
+        x_idx = 0
+        for block_vector in block_vectors.split("\n"):
+            item = block_vector.split('/')
 
-            if block_vector == "":
-                XY_Capsule()
-                continue
+            if len(item) > 0:
+                target_vector = item[0].strip()
+                ref_vector = item[1].strip() if len(item) > 1 else ''
 
-        return ((xy_type, xy_value), )
+                x_item = None
+                label, block_vector = XYPlot_LoraBlockWeight.resolve_vector_string(target_vector, preset_dict)
+                _, ref_block_vector = XYPlot_LoraBlockWeight.resolve_vector_string(ref_vector, preset_dict)
+                if label is not None:
+                    x_item = XY_Capsule_LoraBlockWeight(x_idx, 0, block_vector, label, storage, lora_params)
+                    x_idx += 1
+
+                if x_item is not None and ref_block_vector is not None:
+                    x_item.set_reference_vector(ref_block_vector)
+
+                if x_item is not None:
+                    x_values.append(x_item)
+
+        y_values = [XY_Capsule_LoraBlockWeight(0, 0, '', 'source', storage, lora_params),
+                    XY_Capsule_LoraBlockWeight(0, 1, '', 'reference', storage, lora_params),
+                    XY_Capsule_LoraBlockWeight(0, 2, '', 'diff', storage, lora_params),
+                    XY_Capsule_LoraBlockWeight(0, 3, '', 'heatmap', storage, lora_params)]
+
+        return ((xy_type, x_values), (xy_type, y_values), )
 
 
 NODE_CLASS_MAPPINGS = {
-    "LoraLoaderBlockWeight": LoraLoaderBlockWeight
+    "ImpactXYPlotLoraBlockWeight": XYPlot_LoraBlockWeight,
+    "ImpactLoraLoaderBlockWeight": LoraLoaderBlockWeight
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoraLoaderBlockWeight": "LoraLoaderBlockWeight"
+    "ImpactXYPlotLoraBlockWeight": "XY Input: Lora Block Weight",
+    "ImpactLoraLoaderBlockWeight": "Lora Loader (Block Weight)"
 }
