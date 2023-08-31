@@ -4,16 +4,18 @@ app.registerExtension({
 	name: "Comfy.Impact.Exp",
 
 	nodeCreated(node, app) {
-		if(node.comfyClass == "ImpactLoraLoaderBlockWeight") {
+		if(node.comfyClass == "LoraLoaderBlockWeight (exp)") {
+		    let preset_i = 8;
+		    let vector_i = 9;
 			node._value = "Preset";
-			Object.defineProperty(node.widgets[4], "value", {
+			Object.defineProperty(node.widgets[preset_i], "value", {
 				set: (value) => {
 				        const stackTrace = new Error().stack;
                         if(stackTrace.includes('inner_value_change')) {
                             if(value != "Preset") {
-                                node.widgets[5].value = value.split(':')[1];
+                                node.widgets[vector_i].value = value.split(':')[1];
 	                            if(node.widgets_values) {
-	                                node.widgets_values[5] = node.widgets[4].value;
+	                                node.widgets_values[vector_i] = node.widgets[preset_i].value;
                                 }
                             }
                         }
@@ -26,18 +28,20 @@ app.registerExtension({
 			});
 		}
 
-		if(node.comfyClass == "ImpactXYPlotLoraBlockWeight") {
+		if(node.comfyClass == "XYPlotLoraBlockWeight (exp)") {
+		    let preset_i = 8;
+		    let vector_i = 9;
 			node._value = "Preset";
-			Object.defineProperty(node.widgets[4], "value", {
+			Object.defineProperty(node.widgets[preset_i], "value", {
 				set: (value) => {
 				        const stackTrace = new Error().stack;
                         if(stackTrace.includes('inner_value_change')) {
                             if(value != "Preset") {
-                                if(node.widgets[5].value != "")
-                                    node.widgets[5].value += "\n";
-                                node.widgets[5].value += `${value}/${value.split(':')[0]}`;
+                                if(node.widgets[vector_i].value != "")
+                                    node.widgets[vector_i].value += "\n";
+                                node.widgets[vector_i].value += `${value}/${value.split(':')[0]}`;
 	                            if(node.widgets_values) {
-	                                node.widgets_values[5] = node.widgets[4].value;
+	                                node.widgets_values[vector_i] = node.widgets[preset_i].value;
                                 }
                             }
                         }
