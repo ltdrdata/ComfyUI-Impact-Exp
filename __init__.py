@@ -2,7 +2,7 @@ import importlib
 import os
 
 node_list = [
-    "lora_block_weight",
+    "flex",
 ]
 
 NODE_CLASS_MAPPINGS = {}
