@@ -3,6 +3,7 @@ import os
 
 node_list = [
     "flex",
+    "daam"
 ]
 
 NODE_CLASS_MAPPINGS = {}
